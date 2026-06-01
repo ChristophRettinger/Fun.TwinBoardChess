@@ -149,6 +149,8 @@
       pointer-events: none;
     }
 
+    .sq.last-move { background-color: rgba(205, 210, 106, 0.55); }
+
     /* Banners */
     #banner-overlay {
       position: fixed;
@@ -350,6 +352,8 @@
     let partialSurvivingBoard = null
     let highlightToggle = false
     let pieceSet = 'cburnett'
+    let lastMove1 = null
+    let lastMove2 = null
 
     const botTypeEl     = document.getElementById('bot-type')
     const skillLabelEl  = document.getElementById('skill-label')
@@ -368,7 +372,7 @@
       return (fi + rank) % 2 === 0
     }
 
-    function renderBoard(id, game, interactive, highlights = []) {
+    function renderBoard(id, game, interactive, highlights = [], lastMove = null) {
       const el = document.getElementById(id)
       el.innerHTML = ''
       const flipped = isGameStarted && playerColor === 'b'
@@ -397,6 +401,7 @@
           }
 
           if (highlights.includes(sq)) div.classList.add('origin')
+          if (lastMove && (sq === lastMove.from || sq === lastMove.to)) div.classList.add('last-move')
 
           if (interactive) {
             if (sq === selected) div.classList.add('selected')
@@ -429,20 +434,20 @@
           label1.textContent = 'Board 1 — Active'
           label2.textContent = 'Board 2 — Won'
           panel2.classList.add('frozen')
-          renderBoard('board1', game1, true, highlights)
-          renderBoard('board2', game2, false)
+          renderBoard('board1', game1, true,  highlights, lastMove1)
+          renderBoard('board2', game2, false, [],         lastMove2)
         } else {
           label1.textContent = 'Board 1 — Won'
           label2.textContent = 'Board 2 — Active'
           panel1.classList.add('frozen')
-          renderBoard('board1', game1, false)
-          renderBoard('board2', game2, true, highlights)
+          renderBoard('board1', game1, false, [],         lastMove1)
+          renderBoard('board2', game2, true,  highlights, lastMove2)
         }
       } else {
         label1.textContent = isGameStarted ? 'Board 1 — You play' : 'Board 1'
         label2.textContent = 'Board 2'
-        renderBoard('board1', game1, true, highlights)
-        renderBoard('board2', game2, false)
+        renderBoard('board1', game1, true,  highlights, lastMove1)
+        renderBoard('board2', game2, false, [],         lastMove2)
       }
     }
 
@@ -605,12 +610,16 @@
       if (gamePhase === 'partial') {
         const sg = partialSurvivingBoard === 1 ? game1 : game2
         const m = await botPickMove(sg)
-        if (m) sg.move(m)
+        if (m) {
+          sg.move(m)
+          if (partialSurvivingBoard === 1) lastMove1 = { from: m.from, to: m.to }
+          else                             lastMove2 = { from: m.from, to: m.to }
+        }
       } else {
         const m1 = await botPickMove(game1)
-        if (m1) game1.move(m1)
+        if (m1) { game1.move(m1); lastMove1 = { from: m1.from, to: m1.to } }
         const m2 = await botPickMove(game2)
-        if (m2) game2.move(m2)
+        if (m2) { game2.move(m2); lastMove2 = { from: m2.from, to: m2.to } }
       }
 
       if (checkAfterBotMove()) return
@@ -675,6 +684,8 @@
       moveCount = 0
       gamePhase = 'pre'
       partialSurvivingBoard = null
+      lastMove1 = null
+      lastMove2 = null
       hideBanner()
 
       botTypeEl.disabled = false
