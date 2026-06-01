@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Twin Board Chess</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 3rem;
+      padding: 2rem;
+      background: #1e1e2e;
+      font-family: system-ui, sans-serif;
+    }
+    .panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    h2 {
+      margin: 0;
+      color: #cdd6f4;
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .board {
+      display: grid;
+      grid-template-columns: repeat(8, 64px);
+      grid-template-rows: repeat(8, 64px);
+      border: 3px solid #44415a;
+    }
+    .sq {
+      width: 64px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      font-size: 46px;
+      line-height: 1;
+    }
+    .sq.light    { background: #f0d9b5; }
+    .sq.dark     { background: #b58863; }
+    .sq.selected { background: #f6f669 !important; }
+    .sq.interactive { cursor: pointer; }
+    .sq.target      { cursor: pointer; }
+
+    /* dot marker for empty valid-target squares */
+    .sq.target::after {
+      content: '';
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 30%; height: 30%;
+      background: rgba(0,0,0,0.22);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    /* ring marker when the valid-target square is occupied */
+    .sq.target.occupied::after {
+      width: 90%; height: 90%;
+      background: transparent;
+      border: 6px solid rgba(0,0,0,0.22);
+    }
+
+    /* piece colours */
+    .wp { color: #fff; text-shadow: 0 0 2px #333, 0 0 4px #333; }
+    .bp { color: #1a1a1a; }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h2>Board 1 — You play</h2>
+    <div id="board1" class="board"></div>
+  </div>
+  <div class="panel">
+    <h2>Board 2</h2>
+    <div id="board2" class="board"></div>
+  </div>
+
+  <script type="module">
+    import {Chess} from 'https://cdn.jsdelivr.net/npm/chess.js@1/+esm'
+
+    const GLYPHS = {
+      wk:'♔', wq:'♕', wr:'♖', wb:'♗', wn:'♘', wp:'♙',
+      bk:'♚', bq:'♛', br:'♜', bb:'♝', bn:'♞', bp:'♟',
+    }
+    const FILES = ['a','b','c','d','e','f','g','h']
+    const RANKS = [8,7,6,5,4,3,2,1]
+
+    const game1 = new Chess()
+    const game2 = new Chess()
+    let selected = null
+    let targets = []
+    let inputEnabled = true
+
+    function sqLight(fi, rank) {
+      return (fi + rank) % 2 === 0
+    }
+
+    function renderBoard(id, game, interactive) {
+      const el = document.getElementById(id)
+      el.innerHTML = ''
+      for (const rank of RANKS) {
+        for (let fi = 0; fi < 8; fi++) {
+          const sq = FILES[fi] + rank
+          const piece = game.get(sq)
+          const div = document.createElement('div')
+          div.className = 'sq ' + (sqLight(fi, rank) ? 'light' : 'dark')
+          div.dataset.sq = sq
+
+          if (piece) {
+            div.textContent = GLYPHS[piece.color + piece.type]
+            div.classList.add(piece.color === 'w' ? 'wp' : 'bp')
+          }
+
+          if (interactive) {
+            if (sq === selected) div.classList.add('selected')
+            if (targets.includes(sq)) {
+              div.classList.add('target')
+              if (piece) div.classList.add('occupied')
+            }
+            if (inputEnabled && piece?.color === 'w' && game.turn() === 'w') {
+              div.classList.add('interactive')
+            }
+          }
+
+          el.appendChild(div)
+        }
+      }
+    }
+
+    function render() {
+      renderBoard('board1', game1, true)
+      renderBoard('board2', game2, false)
+    }
+
+    function intersect(square) {
+      const t2 = new Set(game2.moves({square, verbose: true}).map(m => m.to))
+      return game1.moves({square, verbose: true}).map(m => m.to).filter(sq => t2.has(sq))
+    }
+
+    function botMove() {
+      const pick = g => {
+        const ms = g.moves({verbose: true})
+        return ms.length ? ms[Math.floor(Math.random() * ms.length)] : null
+      }
+      const m1 = pick(game1)
+      const m2 = pick(game2)
+      if (m1) game1.move(m1)
+      if (m2) game2.move(m2)
+      inputEnabled = true
+      render()
+    }
+
+    document.getElementById('board1').addEventListener('click', e => {
+      if (!inputEnabled) return
+      const div = e.target.closest('[data-sq]')
+      if (!div) return
+      const sq = div.dataset.sq
+
+      if (targets.includes(sq)) {
+        game1.move({from: selected, to: sq, promotion: 'q'})
+        game2.move({from: selected, to: sq, promotion: 'q'})
+        selected = null
+        targets = []
+        inputEnabled = false
+        render()
+        setTimeout(botMove, 400)
+        return
+      }
+
+      const piece = game1.get(sq)
+      if (piece && piece.color === 'w' && game1.turn() === 'w') {
+        selected = sq
+        targets = intersect(sq)
+      } else {
+        selected = null
+        targets = []
+      }
+      render()
+    })
+
+    render()
+  </script>
+</body>
+</html>
