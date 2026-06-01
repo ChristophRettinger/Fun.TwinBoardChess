@@ -6,6 +6,7 @@
   <title>Twin Board Chess</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     body {
       margin: 0;
       min-height: 100vh;
@@ -77,7 +78,9 @@
       flex-direction: column;
       align-items: center;
       gap: 0.75rem;
+      transition: opacity 0.3s;
     }
+    .panel.frozen { opacity: 0.45; }
     h2 {
       margin: 0;
       color: #cdd6f4;
@@ -107,7 +110,6 @@
     .sq.selected { background: #f6f669 !important; }
     .sq.interactive { cursor: pointer; }
     .sq.target      { cursor: pointer; }
-
     .sq.target::after {
       content: '';
       position: absolute;
@@ -123,9 +125,63 @@
       background: transparent;
       border: 6px solid rgba(0,0,0,0.22);
     }
-
     .wp { color: #fff; text-shadow: 0 0 2px #333, 0 0 4px #333; }
     .bp { color: #1a1a1a; }
+
+    /* Banners */
+    #banner-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.65);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .banner {
+      background: #313244;
+      border: 2px solid #44415a;
+      border-radius: 12px;
+      padding: 2rem 2.5rem;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+      max-width: 380px;
+    }
+    .banner h2 {
+      font-size: 1.5rem;
+      letter-spacing: 0;
+      text-transform: none;
+      margin: 0;
+    }
+    .banner p {
+      margin: 0;
+      color: #a6adc8;
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+    .banner-actions {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 0.5rem;
+    }
+    .banner-actions button {
+      border: none;
+      border-radius: 6px;
+      padding: 0.55rem 1.25rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #banner-continue { background: #89b4fa; color: #1e1e2e; }
+    #banner-continue:hover { background: #74c7ec; }
+    #banner-new-game-overlay { background: #45475a; color: #cdd6f4; }
+    #banner-new-game-overlay:hover { background: #585b70; }
+    .banner.win     h2 { color: #a6e3a1; }
+    .banner.partial h2 { color: #fab387; }
+    .banner.loss    h2 { color: #f38ba8; }
   </style>
 </head>
 <body>
@@ -144,13 +200,24 @@
   </div>
 
   <div class="boards">
-    <div class="panel">
-      <h2>Board 1 — You play</h2>
+    <div class="panel" id="panel1">
+      <h2 id="label1">Board 1 — You play</h2>
       <div id="board1" class="board"></div>
     </div>
-    <div class="panel">
-      <h2>Board 2</h2>
+    <div class="panel" id="panel2">
+      <h2 id="label2">Board 2</h2>
       <div id="board2" class="board"></div>
+    </div>
+  </div>
+
+  <div id="banner-overlay" hidden>
+    <div id="banner" class="banner">
+      <h2 id="banner-title"></h2>
+      <p id="banner-msg"></p>
+      <div class="banner-actions">
+        <button id="banner-continue" hidden>Continue</button>
+        <button id="banner-new-game-overlay">New Game</button>
+      </div>
     </div>
   </div>
 
@@ -171,6 +238,10 @@
     let isGameStarted = false
     let playerColor = 'w'
     let moveCount = 0
+    // 'pre' | 'playing' | 'partial' | 'won' | 'lost'
+    let gamePhase = 'pre'
+    // which board is still active after partial victory (1 or 2)
+    let partialSurvivingBoard = null
 
     const botTypeEl     = document.getElementById('bot-type')
     const playerColorEl = document.getElementById('player-color')
@@ -185,7 +256,6 @@
     function renderBoard(id, game, interactive) {
       const el = document.getElementById(id)
       el.innerHTML = ''
-      // flip board to black's perspective when game is active and player is black
       const flipped = isGameStarted && playerColor === 'b'
       const ranks = flipped ? [1,2,3,4,5,6,7,8] : [8,7,6,5,4,3,2,1]
       const fileIndices = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7]
@@ -220,8 +290,34 @@
     }
 
     function render() {
-      renderBoard('board1', game1, true)
-      renderBoard('board2', game2, false)
+      const panel1 = document.getElementById('panel1')
+      const panel2 = document.getElementById('panel2')
+      const label1 = document.getElementById('label1')
+      const label2 = document.getElementById('label2')
+
+      panel1.classList.remove('frozen')
+      panel2.classList.remove('frozen')
+
+      if (gamePhase === 'partial') {
+        if (partialSurvivingBoard === 1) {
+          label1.textContent = 'Board 1 — Active'
+          label2.textContent = 'Board 2 — Won'
+          panel2.classList.add('frozen')
+          renderBoard('board1', game1, true)
+          renderBoard('board2', game2, false)
+        } else {
+          label1.textContent = 'Board 1 — Won'
+          label2.textContent = 'Board 2 — Active'
+          panel1.classList.add('frozen')
+          renderBoard('board1', game1, false)
+          renderBoard('board2', game2, true)
+        }
+      } else {
+        label1.textContent = isGameStarted ? 'Board 1 — You play' : 'Board 1'
+        label2.textContent = 'Board 2'
+        renderBoard('board1', game1, true)
+        renderBoard('board2', game2, false)
+      }
     }
 
     function intersect(square) {
@@ -229,15 +325,155 @@
       return game1.moves({square, verbose: true}).map(m => m.to).filter(sq => t2.has(sq))
     }
 
+    // True if there is at least one player move whose destination exists on both boards.
+    function hasAnyIntersectionMove() {
+      const moves = game1.moves({verbose: true})
+      const froms = [...new Set(moves.map(m => m.from))]
+      return froms.some(sq => intersect(sq).length > 0)
+    }
+
+    function showBanner(type, wonBoard) {
+      const overlay = document.getElementById('banner-overlay')
+      const banner  = document.getElementById('banner')
+      const title   = document.getElementById('banner-title')
+      const msg     = document.getElementById('banner-msg')
+      const contBtn = document.getElementById('banner-continue')
+
+      overlay.hidden = false
+      banner.className = 'banner'
+
+      if (type === 'full-win') {
+        banner.classList.add('win')
+        title.textContent = 'Victory!'
+        msg.textContent = 'You checkmated the bot on both boards!'
+        contBtn.hidden = true
+      } else if (type === 'partial') {
+        const survBoard = wonBoard === 1 ? 2 : 1
+        banner.classList.add('partial')
+        title.textContent = 'Board Conquered!'
+        msg.textContent = `Board ${wonBoard} is won! Board ${survBoard} continues — intersection constraint removed.`
+        contBtn.hidden = false
+      } else {
+        banner.classList.add('loss')
+        title.textContent = 'Game Over'
+        msg.textContent = 'No legal moves remaining.'
+        contBtn.hidden = true
+      }
+    }
+
+    function hideBanner() {
+      document.getElementById('banner-overlay').hidden = true
+    }
+
+    // Called after player's move. It is now the bot's turn.
+    // Checkmate = bot is mated = player wins that board.
+    // Stalemate = loss (per game rules).
+    function checkAfterPlayerMove() {
+      if (gamePhase === 'partial') {
+        const sg = partialSurvivingBoard === 1 ? game1 : game2
+        if (sg.isCheckmate()) {
+          gamePhase = 'won'
+          inputEnabled = false
+          render()
+          showBanner('full-win')
+          return true
+        }
+        if (sg.isStalemate()) {
+          gamePhase = 'lost'
+          inputEnabled = false
+          render()
+          showBanner('loss')
+          return true
+        }
+        return false
+      }
+
+      const g1cm = game1.isCheckmate()
+      const g2cm = game2.isCheckmate()
+
+      if (g1cm && g2cm) {
+        gamePhase = 'won'
+        inputEnabled = false
+        render()
+        showBanner('full-win')
+        return true
+      }
+      if (g1cm) {
+        gamePhase = 'partial'
+        partialSurvivingBoard = 2
+        render()
+        showBanner('partial', 1)
+        return true
+      }
+      if (g2cm) {
+        gamePhase = 'partial'
+        partialSurvivingBoard = 1
+        render()
+        showBanner('partial', 2)
+        return true
+      }
+      if (game1.isStalemate() || game2.isStalemate()) {
+        gamePhase = 'lost'
+        inputEnabled = false
+        render()
+        showBanner('loss')
+        return true
+      }
+      return false
+    }
+
+    // Called after the bot's move. It is now the player's turn.
+    // Checkmate/stalemate = player has no moves = loss.
+    // Empty intersection = loss.
+    function checkAfterBotMove() {
+      if (gamePhase === 'partial') {
+        const sg = partialSurvivingBoard === 1 ? game1 : game2
+        if (sg.isCheckmate() || sg.isStalemate()) {
+          gamePhase = 'lost'
+          inputEnabled = false
+          render()
+          showBanner('loss')
+          return true
+        }
+        return false
+      }
+
+      if (game1.isCheckmate() || game1.isStalemate() ||
+          game2.isCheckmate() || game2.isStalemate()) {
+        gamePhase = 'lost'
+        inputEnabled = false
+        render()
+        showBanner('loss')
+        return true
+      }
+      if (!hasAnyIntersectionMove()) {
+        gamePhase = 'lost'
+        inputEnabled = false
+        render()
+        showBanner('loss')
+        return true
+      }
+      return false
+    }
+
     function botMove() {
       const pick = g => {
         const ms = g.moves({verbose: true})
         return ms.length ? ms[Math.floor(Math.random() * ms.length)] : null
       }
-      const m1 = pick(game1)
-      const m2 = pick(game2)
-      if (m1) game1.move(m1)
-      if (m2) game2.move(m2)
+
+      if (gamePhase === 'partial') {
+        const sg = partialSurvivingBoard === 1 ? game1 : game2
+        const m = pick(sg)
+        if (m) sg.move(m)
+      } else {
+        const m1 = pick(game1)
+        const m2 = pick(game2)
+        if (m1) game1.move(m1)
+        if (m2) game2.move(m2)
+      }
+
+      if (checkAfterBotMove()) return
       inputEnabled = true
       render()
     }
@@ -246,6 +482,7 @@
       playerColor = playerColorEl.value
       isGameStarted = true
       moveCount = 0
+      gamePhase = 'playing'
 
       botTypeEl.disabled = true
       playerColorEl.disabled = true
@@ -271,6 +508,9 @@
       inputEnabled = false
       isGameStarted = false
       moveCount = 0
+      gamePhase = 'pre'
+      partialSurvivingBoard = null
+      hideBanner()
 
       botTypeEl.disabled = false
       playerColorEl.disabled = false
@@ -280,38 +520,73 @@
       render()
     }
 
-    document.getElementById('board1').addEventListener('click', e => {
+    function handleBoardClick(boardNum, e) {
       if (!isGameStarted || !inputEnabled) return
+      if (gamePhase === 'playing' && boardNum !== 1) return
+      if (gamePhase === 'partial' && boardNum !== partialSurvivingBoard) return
+      if (gamePhase !== 'playing' && gamePhase !== 'partial') return
+
       const div = e.target.closest('[data-sq]')
       if (!div) return
       const sq = div.dataset.sq
+      const activeGame = boardNum === 1 ? game1 : game2
 
       if (targets.includes(sq)) {
-        game1.move({from: selected, to: sq, promotion: 'q'})
-        game2.move({from: selected, to: sq, promotion: 'q'})
+        const wasPlaying = gamePhase === 'playing'
+
+        activeGame.move({from: selected, to: sq, promotion: 'q'})
+        if (wasPlaying) {
+          const otherGame = boardNum === 1 ? game2 : game1
+          otherGame.move({from: selected, to: sq, promotion: 'q'})
+        }
+
         selected = null
         targets = []
         inputEnabled = false
         moveCount++
         moveCounterEl.textContent = 'Move: ' + moveCount
-        render()
-        setTimeout(botMove, 400)
+
+        const ended = checkAfterPlayerMove()
+
+        if (!ended) {
+          // Normal continuation: no end state, schedule bot move
+          render()
+          setTimeout(botMove, 400)
+        } else if (gamePhase === 'partial' && wasPlaying) {
+          // Just entered partial mode: bot will move after player clicks Continue
+          // render() already called inside checkAfterPlayerMove
+        }
+        // else: terminal state (win/loss) — render already called
         return
       }
 
-      const piece = game1.get(sq)
-      if (piece && piece.color === playerColor && game1.turn() === playerColor) {
+      const piece = activeGame.get(sq)
+      if (piece && piece.color === playerColor && activeGame.turn() === playerColor) {
         selected = sq
-        targets = intersect(sq)
+        targets = gamePhase === 'partial'
+          ? activeGame.moves({square: sq, verbose: true}).map(m => m.to)
+          : intersect(sq)
       } else {
         selected = null
         targets = []
       }
       render()
-    })
+    }
+
+    document.getElementById('board1').addEventListener('click', e => handleBoardClick(1, e))
+    document.getElementById('board2').addEventListener('click', e => handleBoardClick(2, e))
 
     startBtn.addEventListener('click', startGame)
     newGameBtn.addEventListener('click', newGame)
+
+    document.getElementById('banner-continue').addEventListener('click', () => {
+      hideBanner()
+      setTimeout(botMove, 400)
+    })
+    document.getElementById('banner-new-game-overlay').addEventListener('click', () => {
+      hideBanner()
+      newGame()
+    })
 
     render()
   </script>
