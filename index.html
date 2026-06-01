@@ -47,14 +47,14 @@
       opacity: 0.5;
       cursor: not-allowed;
     }
-    #skill-slider {
+    #difficulty-slider {
       accent-color: #89b4fa;
-      width: 80px;
+      width: 100px;
       cursor: pointer;
       vertical-align: middle;
     }
-    #skill-slider:disabled { opacity: 0.5; cursor: not-allowed; }
-    #skill-value { min-width: 1ch; font-variant-numeric: tabular-nums; }
+    #difficulty-slider:disabled { opacity: 0.5; cursor: not-allowed; }
+    #difficulty-value { font-size: 0.875rem; font-weight: 500; white-space: nowrap; }
     #loading-msg { font-size: 0.875rem; color: #a6adc8; }
     .controls button {
       background: #89b4fa;
@@ -67,12 +67,12 @@
       cursor: pointer;
     }
     .controls button:hover { background: #74c7ec; }
-    #new-game-btn {
+    #new-game-btn, #rules-btn {
       background: #313244;
       color: #cdd6f4;
       border: 1px solid #44415a;
     }
-    #new-game-btn:hover { background: #45475a; }
+    #new-game-btn:hover, #rules-btn:hover { background: #45475a; }
     #move-counter {
       font-size: 0.875rem;
       font-weight: 500;
@@ -206,6 +206,63 @@
     .banner.partial h2 { color: #fab387; }
     .banner.loss    h2 { color: #f38ba8; }
 
+    /* Rules overlay */
+    #rules-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.65);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .rules-modal {
+      background: #313244;
+      border: 2px solid #44415a;
+      border-radius: 12px;
+      padding: 2rem 2.5rem;
+      max-width: 480px;
+      width: calc(100vw - 3rem);
+      position: relative;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    #rules-close {
+      position: absolute;
+      top: 0.75rem;
+      right: 0.75rem;
+      background: transparent;
+      border: none;
+      color: #cdd6f4;
+      font-size: 1.1rem;
+      cursor: pointer;
+      padding: 0.25rem 0.5rem;
+      line-height: 1;
+    }
+    #rules-close:hover { color: #f38ba8; }
+    .rules-modal h2 {
+      margin: 0 0 1rem;
+      font-size: 1.2rem;
+      color: #cdd6f4;
+      letter-spacing: 0;
+      text-transform: none;
+      font-weight: 700;
+    }
+    .rules-modal h3 {
+      margin: 1.1rem 0 0.25rem;
+      font-size: 0.9rem;
+      color: #89b4fa;
+      font-weight: 600;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .rules-modal p {
+      margin: 0;
+      color: #a6adc8;
+      font-size: 0.875rem;
+      line-height: 1.55;
+    }
+
     /* ── Portrait: stack boards ──────────────────────────── */
     @media (orientation: portrait) {
       body { padding: 1rem; }
@@ -234,20 +291,16 @@
       .controls label, .controls button, .controls select,
       #move-counter, #loading-msg { font-size: 0.75rem; }
       .controls button { padding: 0.2rem 0.6rem; }
-      #skill-slider { width: 60px; }
+      #difficulty-slider { width: 70px; }
       h2 { font-size: 0.85rem; }
     }
   </style>
 </head>
 <body>
   <div class="controls">
-    <label>Bot: <select id="bot-type">
-      <option value="random">Random</option>
-      <option value="stockfish">Stockfish</option>
-    </select></label>
-    <label id="skill-label" hidden>Skill:
-      <input type="range" id="skill-slider" min="0" max="5" value="3" step="1">
-      <span id="skill-value">3</span>
+    <label>Difficulty:
+      <input type="range" id="difficulty-slider" min="0" max="11" value="6" step="1">
+      <span id="difficulty-value">Stockfish 0</span>
     </label>
     <label>Pieces: <select id="piece-set">
       <option value="cburnett">Classic (cburnett)</option>
@@ -261,6 +314,7 @@
     </select></label>
     <button id="start-btn">Start Game</button>
     <button id="new-game-btn">New Game</button>
+    <button id="rules-btn">Rules</button>
     <span id="move-counter" hidden>Move: 0</span>
     <label id="highlight-label" hidden><input type="checkbox" id="highlight-toggle"> Highlights</label>
     <span id="loading-msg" hidden>Loading Stockfish…</span>
@@ -274,6 +328,24 @@
     <div class="panel" id="panel2">
       <h2 id="label2">Board 2</h2>
       <div id="board2" class="board"></div>
+    </div>
+  </div>
+
+  <div id="rules-overlay" hidden>
+    <div class="rules-modal">
+      <button id="rules-close">✕</button>
+      <h2>Twin Board Chess</h2>
+      <p>You play the same side on two independent chess boards simultaneously against the same bot. <strong>The goal: checkmate the bot on both boards at the same time.</strong></p>
+      <h3>Moving</h3>
+      <p>Your move must be legal on both boards at once. Only squares reachable from your selected piece on <em>both</em> boards are highlighted. The bot responds independently on each board.</p>
+      <h3>Partial Victory</h3>
+      <p>When you checkmate the bot on one board, that board freezes as a consolation. The surviving board continues as normal chess — the intersection constraint is removed and you play freely. But this is a compromise, not the real win.</p>
+      <h3>Winning</h3>
+      <p>Checkmate the bot on both boards simultaneously. This is the true victory. Achieving it through a partial victory first is a lesser outcome.</p>
+      <h3>Losing</h3>
+      <p>No shared legal move exists between the boards; stalemate on either board; the bot checkmates or stalemates you on the surviving board after partial victory.</p>
+      <h3>Notes</h3>
+      <p>Pawns always promote to queen. You interact only with Board 1 during normal play; the move mirrors automatically to Board 2.</p>
     </div>
   </div>
 
@@ -303,8 +375,9 @@
     }
 
     class StockfishBot {
-      constructor(skillLevel) {
+      constructor(skillLevel, movetime = 500) {
         this.skillLevel = skillLevel
+        this.movetime = movetime
         this.worker = null
         this.pendingResolve = null
       }
@@ -349,7 +422,7 @@
 
       async getMove(fen) {
         this.worker.postMessage(`position fen ${fen}`)
-        this.worker.postMessage('go movetime 500')
+        this.worker.postMessage(`go movetime ${this.movetime}`)
         const lan = await new Promise(r => { this.pendingResolve = r })
         if (!lan || lan === '(none)') return null
         const from = lan.slice(0, 2)
@@ -360,6 +433,38 @@
 
       destroy() {
         if (this.worker) { this.worker.terminate(); this.worker = null }
+      }
+    }
+
+    function difficultyFromSlider(pos) {
+      if (pos === 0) return { type: 'random', label: 'Random' }
+      if (pos <= 5)  return { type: 'novice', level: pos, label: `Novice ${pos}` }
+      return { type: 'stockfish', skillLevel: pos - 6, label: `Stockfish ${pos - 6}` }
+    }
+
+    const NOVICE_BLEND = [0, 0.10, 0.25, 0.45, 0.65, 0.85]
+
+    class NoviceBot {
+      constructor(level) {
+        this.blendProbability = NOVICE_BLEND[level]
+        this.sfBot = new StockfishBot(0, 100)
+      }
+
+      init() {
+        return this.sfBot.init()
+      }
+
+      async getMove(fen) {
+        if (Math.random() < this.blendProbability) {
+          return this.sfBot.getMove(fen)
+        }
+        const tempGame = new Chess(fen)
+        const ms = tempGame.moves({ verbose: true })
+        return ms.length ? ms[Math.floor(Math.random() * ms.length)] : null
+      }
+
+      destroy() {
+        this.sfBot.destroy()
       }
     }
 
@@ -387,11 +492,9 @@
     let lastMove1 = null
     let lastMove2 = null
 
-    const botTypeEl     = document.getElementById('bot-type')
-    const skillLabelEl  = document.getElementById('skill-label')
-    const skillSliderEl = document.getElementById('skill-slider')
-    const skillValueEl  = document.getElementById('skill-value')
-    const playerColorEl = document.getElementById('player-color')
+    const difficultySliderEl = document.getElementById('difficulty-slider')
+    const difficultyValueEl  = document.getElementById('difficulty-value')
+    const playerColorEl      = document.getElementById('player-color')
     const startBtn      = document.getElementById('start-btn')
     const newGameBtn    = document.getElementById('new-game-btn')
     const moveCounterEl = document.getElementById('move-counter')
@@ -633,9 +736,11 @@
     }
 
     async function botPickMove(game) {
-      if (bot instanceof StockfishBot) return bot.getMove(game.fen())
-      const ms = game.moves({verbose: true})
-      return ms.length ? ms[Math.floor(Math.random() * ms.length)] : null
+      if (bot instanceof RandomBot) {
+        const ms = game.moves({verbose: true})
+        return ms.length ? ms[Math.floor(Math.random() * ms.length)] : null
+      }
+      return bot.getMove(game.fen())
     }
 
     async function botMove() {
@@ -660,14 +765,21 @@
     }
 
     async function startGame() {
+      const difficulty = difficultyFromSlider(parseInt(difficultySliderEl.value, 10))
       playerColor = playerColorEl.value
-      botTypeEl.disabled = true
-      skillSliderEl.disabled = true
+      difficultySliderEl.disabled = true
       playerColorEl.disabled = true
       startBtn.hidden = true
 
-      if (botTypeEl.value === 'stockfish') {
-        bot = new StockfishBot(parseInt(skillSliderEl.value, 10))
+      if (difficulty.type === 'stockfish') {
+        bot = new StockfishBot(difficulty.skillLevel)
+      } else if (difficulty.type === 'novice') {
+        bot = new NoviceBot(difficulty.level)
+      } else {
+        bot = new RandomBot()
+      }
+
+      if (difficulty.type === 'stockfish' || difficulty.type === 'novice') {
         loadingMsgEl.hidden = false
         try {
           await bot.init()
@@ -675,16 +787,13 @@
           bot.destroy()
           bot = null
           loadingMsgEl.hidden = true
-          botTypeEl.disabled = false
-          skillSliderEl.disabled = false
+          difficultySliderEl.disabled = false
           playerColorEl.disabled = false
           startBtn.hidden = false
           alert('Failed to load Stockfish. Check your internet connection and try again.')
           return
         }
         loadingMsgEl.hidden = true
-      } else {
-        bot = new RandomBot()
       }
 
       isGameStarted = true
@@ -720,8 +829,7 @@
       lastMove2 = null
       hideBanner()
 
-      botTypeEl.disabled = false
-      skillSliderEl.disabled = false
+      difficultySliderEl.disabled = false
       playerColorEl.disabled = false
       startBtn.hidden = false
       moveCounterEl.hidden = true
@@ -786,11 +894,8 @@
       render()
     }
 
-    botTypeEl.addEventListener('change', () => {
-      skillLabelEl.hidden = botTypeEl.value !== 'stockfish'
-    })
-    skillSliderEl.addEventListener('input', () => {
-      skillValueEl.textContent = skillSliderEl.value
+    difficultySliderEl.addEventListener('input', () => {
+      difficultyValueEl.textContent = difficultyFromSlider(parseInt(difficultySliderEl.value, 10)).label
     })
     highlightToggleEl.addEventListener('change', () => {
       highlightToggle = highlightToggleEl.checked
@@ -806,6 +911,16 @@
 
     startBtn.addEventListener('click', startGame)
     newGameBtn.addEventListener('click', newGame)
+
+    document.getElementById('rules-btn').addEventListener('click', () => {
+      document.getElementById('rules-overlay').hidden = false
+    })
+    document.getElementById('rules-close').addEventListener('click', () => {
+      document.getElementById('rules-overlay').hidden = true
+    })
+    document.getElementById('rules-overlay').addEventListener('click', e => {
+      if (e.target === e.currentTarget) document.getElementById('rules-overlay').hidden = true
+    })
 
     document.getElementById('banner-continue').addEventListener('click', () => {
       hideBanner()
