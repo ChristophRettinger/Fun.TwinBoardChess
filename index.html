@@ -47,6 +47,15 @@
       opacity: 0.5;
       cursor: not-allowed;
     }
+    #skill-slider {
+      accent-color: #89b4fa;
+      width: 80px;
+      cursor: pointer;
+      vertical-align: middle;
+    }
+    #skill-slider:disabled { opacity: 0.5; cursor: not-allowed; }
+    #skill-value { min-width: 1ch; font-variant-numeric: tabular-nums; }
+    #loading-msg { font-size: 0.875rem; color: #a6adc8; }
     .controls button {
       background: #89b4fa;
       color: #1e1e2e;
@@ -188,8 +197,12 @@
   <div class="controls">
     <label>Bot: <select id="bot-type">
       <option value="random">Random</option>
-      <option value="stockfish" disabled>Stockfish (soon)</option>
+      <option value="stockfish">Stockfish</option>
     </select></label>
+    <label id="skill-label" hidden>Skill:
+      <input type="range" id="skill-slider" min="0" max="5" value="3" step="1">
+      <span id="skill-value">3</span>
+    </label>
     <label>Play as: <select id="player-color">
       <option value="w">White</option>
       <option value="b">Black</option>
@@ -197,6 +210,7 @@
     <button id="start-btn">Start Game</button>
     <button id="new-game-btn">New Game</button>
     <span id="move-counter" hidden>Move: 0</span>
+    <span id="loading-msg" hidden>Loading Stockfish…</span>
   </div>
 
   <div class="boards">
@@ -224,6 +238,78 @@
   <script type="module">
     import {Chess} from 'https://cdn.jsdelivr.net/npm/chess.js@1/+esm'
 
+    const STOCKFISH_JS   = 'https://cdn.jsdelivr.net/npm/stockfish@16/src/stockfish-nnue-16-single.js'
+    const STOCKFISH_WASM = 'https://cdn.jsdelivr.net/npm/stockfish@16/src/stockfish-nnue-16-single.wasm'
+
+    class RandomBot {
+      async getMove(game) {
+        const ms = game.moves({verbose: true})
+        return ms.length ? ms[Math.floor(Math.random() * ms.length)] : null
+      }
+      destroy() {}
+    }
+
+    class StockfishBot {
+      constructor(skillLevel) {
+        this.skillLevel = skillLevel
+        this.worker = null
+        this.pendingResolve = null
+      }
+
+      init() {
+        return new Promise((resolve, reject) => {
+          // Intercept fetch so the relative WASM URL gets replaced with the full CDN URL.
+          // Stockfish's browser-worker init derives the WASM path from self.location.hash,
+          // which is empty in a Blob worker, leaving only the filename as the fetch target.
+          const workerSrc = [
+            `const _f=self.fetch.bind(self);`,
+            `self.fetch=(u,...r)=>{if(typeof u==='string'&&u.includes('.wasm')&&!u.startsWith('http')){u='${STOCKFISH_WASM}'}return _f(u,...r)};`,
+            `importScripts('${STOCKFISH_JS}');`,
+          ].join('')
+          const blob = new Blob([workerSrc], {type: 'text/javascript'})
+          const blobUrl = URL.createObjectURL(blob)
+          this.worker = new Worker(blobUrl)
+          URL.revokeObjectURL(blobUrl)
+
+          this.worker.onerror = reject
+          this.worker.onmessage = ({data}) => {
+            if (data === 'uciok') {
+              this.worker.postMessage(`setoption name Skill Level value ${this.skillLevel}`)
+              this.worker.postMessage('isready')
+            } else if (data === 'readyok') {
+              this.worker.onmessage = ({data}) => {
+                if (typeof data === 'string' && data.startsWith('bestmove ')) {
+                  const lan = data.split(' ')[1]
+                  if (this.pendingResolve) {
+                    const r = this.pendingResolve
+                    this.pendingResolve = null
+                    r(lan)
+                  }
+                }
+              }
+              resolve()
+            }
+          }
+          this.worker.postMessage('uci')
+        })
+      }
+
+      async getMove(fen) {
+        this.worker.postMessage(`position fen ${fen}`)
+        this.worker.postMessage('go movetime 500')
+        const lan = await new Promise(r => { this.pendingResolve = r })
+        if (!lan || lan === '(none)') return null
+        const from = lan.slice(0, 2)
+        const to   = lan.slice(2, 4)
+        const promo = lan.length === 5 ? lan[4] : undefined
+        return promo ? {from, to, promotion: promo} : {from, to}
+      }
+
+      destroy() {
+        if (this.worker) { this.worker.terminate(); this.worker = null }
+      }
+    }
+
     const GLYPHS = {
       wk:'♔', wq:'♕', wr:'♖', wb:'♗', wn:'♘', wp:'♙',
       bk:'♚', bq:'♛', br:'♜', bb:'♝', bn:'♞', bp:'♟',
@@ -238,16 +324,21 @@
     let isGameStarted = false
     let playerColor = 'w'
     let moveCount = 0
+    let bot = null
     // 'pre' | 'playing' | 'partial' | 'won' | 'lost'
     let gamePhase = 'pre'
     // which board is still active after partial victory (1 or 2)
     let partialSurvivingBoard = null
 
     const botTypeEl     = document.getElementById('bot-type')
+    const skillLabelEl  = document.getElementById('skill-label')
+    const skillSliderEl = document.getElementById('skill-slider')
+    const skillValueEl  = document.getElementById('skill-value')
     const playerColorEl = document.getElementById('player-color')
     const startBtn      = document.getElementById('start-btn')
     const newGameBtn    = document.getElementById('new-game-btn')
     const moveCounterEl = document.getElementById('move-counter')
+    const loadingMsgEl  = document.getElementById('loading-msg')
 
     function sqLight(fi, rank) {
       return (fi + rank) % 2 === 0
@@ -456,20 +547,21 @@
       return false
     }
 
-    function botMove() {
-      const pick = g => {
-        const ms = g.moves({verbose: true})
-        return ms.length ? ms[Math.floor(Math.random() * ms.length)] : null
-      }
+    async function botPickMove(game) {
+      if (bot instanceof StockfishBot) return bot.getMove(game.fen())
+      const ms = game.moves({verbose: true})
+      return ms.length ? ms[Math.floor(Math.random() * ms.length)] : null
+    }
 
+    async function botMove() {
       if (gamePhase === 'partial') {
         const sg = partialSurvivingBoard === 1 ? game1 : game2
-        const m = pick(sg)
+        const m = await botPickMove(sg)
         if (m) sg.move(m)
       } else {
-        const m1 = pick(game1)
-        const m2 = pick(game2)
+        const m1 = await botPickMove(game1)
         if (m1) game1.move(m1)
+        const m2 = await botPickMove(game2)
         if (m2) game2.move(m2)
       }
 
@@ -478,15 +570,37 @@
       render()
     }
 
-    function startGame() {
+    async function startGame() {
       playerColor = playerColorEl.value
+      botTypeEl.disabled = true
+      skillSliderEl.disabled = true
+      playerColorEl.disabled = true
+      startBtn.hidden = true
+
+      if (botTypeEl.value === 'stockfish') {
+        bot = new StockfishBot(parseInt(skillSliderEl.value, 10))
+        loadingMsgEl.hidden = false
+        try {
+          await bot.init()
+        } catch (err) {
+          bot.destroy()
+          bot = null
+          loadingMsgEl.hidden = true
+          botTypeEl.disabled = false
+          skillSliderEl.disabled = false
+          playerColorEl.disabled = false
+          startBtn.hidden = false
+          alert('Failed to load Stockfish. Check your internet connection and try again.')
+          return
+        }
+        loadingMsgEl.hidden = true
+      } else {
+        bot = new RandomBot()
+      }
+
       isGameStarted = true
       moveCount = 0
       gamePhase = 'playing'
-
-      botTypeEl.disabled = true
-      playerColorEl.disabled = true
-      startBtn.hidden = true
       moveCounterEl.hidden = false
       moveCounterEl.textContent = 'Move: 0'
 
@@ -501,6 +615,8 @@
     }
 
     function newGame() {
+      if (bot) { bot.destroy(); bot = null }
+
       game1.reset()
       game2.reset()
       selected = null
@@ -513,9 +629,11 @@
       hideBanner()
 
       botTypeEl.disabled = false
+      skillSliderEl.disabled = false
       playerColorEl.disabled = false
       startBtn.hidden = false
       moveCounterEl.hidden = true
+      loadingMsgEl.hidden = true
 
       render()
     }
@@ -572,6 +690,13 @@
       }
       render()
     }
+
+    botTypeEl.addEventListener('change', () => {
+      skillLabelEl.hidden = botTypeEl.value !== 'stockfish'
+    })
+    skillSliderEl.addEventListener('input', () => {
+      skillValueEl.textContent = skillSliderEl.value
+    })
 
     document.getElementById('board1').addEventListener('click', e => handleBoardClick(1, e))
     document.getElementById('board2').addEventListener('click', e => handleBoardClick(2, e))
