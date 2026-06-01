@@ -205,6 +205,38 @@
     .banner.win     h2 { color: #a6e3a1; }
     .banner.partial h2 { color: #fab387; }
     .banner.loss    h2 { color: #f38ba8; }
+
+    /* ── Portrait: stack boards ──────────────────────────── */
+    @media (orientation: portrait) {
+      body { padding: 1rem; }
+      .boards { flex-direction: column; gap: 1.5rem; }
+      .board {
+        --sq: min(64px, calc((100vw - 2rem - 6px) / 8));
+        grid-template-columns: repeat(8, var(--sq));
+        grid-template-rows: repeat(8, var(--sq));
+      }
+      .sq { width: var(--sq); height: var(--sq); font-size: calc(var(--sq) * 0.72); }
+      .controls { width: 100%; }
+      .banner { max-width: calc(100vw - 2rem); padding: 1.5rem; }
+    }
+
+    /* ── Landscape phones: side-by-side, scaled ─────────── */
+    @media (orientation: landscape) and (max-height: 500px) {
+      body { padding: 0.5rem; gap: 0.5rem; }
+      .boards { gap: 1rem; }
+      .board {
+        --sq: min(64px, min(calc((100vh - 4rem) / 8), calc((100vw - 3rem) / 16)));
+        grid-template-columns: repeat(8, var(--sq));
+        grid-template-rows: repeat(8, var(--sq));
+      }
+      .sq { width: var(--sq); height: var(--sq); font-size: calc(var(--sq) * 0.72); }
+      .controls { gap: 0.5rem; }
+      .controls label, .controls button, .controls select,
+      #move-counter, #loading-msg { font-size: 0.75rem; }
+      .controls button { padding: 0.2rem 0.6rem; }
+      #skill-slider { width: 60px; }
+      h2 { font-size: 0.85rem; }
+    }
   </style>
 </head>
 <body>
