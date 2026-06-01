@@ -10,12 +10,67 @@
       margin: 0;
       min-height: 100vh;
       display: flex;
+      flex-direction: column;
       justify-content: center;
       align-items: center;
-      gap: 3rem;
+      gap: 1.5rem;
       padding: 2rem;
       background: #1e1e2e;
       font-family: system-ui, sans-serif;
+      color: #cdd6f4;
+    }
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .controls label {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+    .controls select {
+      background: #313244;
+      color: #cdd6f4;
+      border: 1px solid #44415a;
+      border-radius: 4px;
+      padding: 0.3rem 0.5rem;
+      font-size: 0.875rem;
+      cursor: pointer;
+    }
+    .controls select:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .controls button {
+      background: #89b4fa;
+      color: #1e1e2e;
+      border: none;
+      border-radius: 4px;
+      padding: 0.35rem 0.9rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .controls button:hover { background: #74c7ec; }
+    #new-game-btn {
+      background: #313244;
+      color: #cdd6f4;
+      border: 1px solid #44415a;
+    }
+    #new-game-btn:hover { background: #45475a; }
+    #move-counter {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #a6adc8;
+    }
+    .boards {
+      display: flex;
+      gap: 3rem;
     }
     .panel {
       display: flex;
@@ -53,7 +108,6 @@
     .sq.interactive { cursor: pointer; }
     .sq.target      { cursor: pointer; }
 
-    /* dot marker for empty valid-target squares */
     .sq.target::after {
       content: '';
       position: absolute;
@@ -64,26 +118,40 @@
       border-radius: 50%;
       pointer-events: none;
     }
-    /* ring marker when the valid-target square is occupied */
     .sq.target.occupied::after {
       width: 90%; height: 90%;
       background: transparent;
       border: 6px solid rgba(0,0,0,0.22);
     }
 
-    /* piece colours */
     .wp { color: #fff; text-shadow: 0 0 2px #333, 0 0 4px #333; }
     .bp { color: #1a1a1a; }
   </style>
 </head>
 <body>
-  <div class="panel">
-    <h2>Board 1 — You play</h2>
-    <div id="board1" class="board"></div>
+  <div class="controls">
+    <label>Bot: <select id="bot-type">
+      <option value="random">Random</option>
+      <option value="stockfish" disabled>Stockfish (soon)</option>
+    </select></label>
+    <label>Play as: <select id="player-color">
+      <option value="w">White</option>
+      <option value="b">Black</option>
+    </select></label>
+    <button id="start-btn">Start Game</button>
+    <button id="new-game-btn">New Game</button>
+    <span id="move-counter" hidden>Move: 0</span>
   </div>
-  <div class="panel">
-    <h2>Board 2</h2>
-    <div id="board2" class="board"></div>
+
+  <div class="boards">
+    <div class="panel">
+      <h2>Board 1 — You play</h2>
+      <div id="board1" class="board"></div>
+    </div>
+    <div class="panel">
+      <h2>Board 2</h2>
+      <div id="board2" class="board"></div>
+    </div>
   </div>
 
   <script type="module">
@@ -94,13 +162,21 @@
       bk:'♚', bq:'♛', br:'♜', bb:'♝', bn:'♞', bp:'♟',
     }
     const FILES = ['a','b','c','d','e','f','g','h']
-    const RANKS = [8,7,6,5,4,3,2,1]
 
     const game1 = new Chess()
     const game2 = new Chess()
     let selected = null
     let targets = []
-    let inputEnabled = true
+    let inputEnabled = false
+    let isGameStarted = false
+    let playerColor = 'w'
+    let moveCount = 0
+
+    const botTypeEl     = document.getElementById('bot-type')
+    const playerColorEl = document.getElementById('player-color')
+    const startBtn      = document.getElementById('start-btn')
+    const newGameBtn    = document.getElementById('new-game-btn')
+    const moveCounterEl = document.getElementById('move-counter')
 
     function sqLight(fi, rank) {
       return (fi + rank) % 2 === 0
@@ -109,8 +185,13 @@
     function renderBoard(id, game, interactive) {
       const el = document.getElementById(id)
       el.innerHTML = ''
-      for (const rank of RANKS) {
-        for (let fi = 0; fi < 8; fi++) {
+      // flip board to black's perspective when game is active and player is black
+      const flipped = isGameStarted && playerColor === 'b'
+      const ranks = flipped ? [1,2,3,4,5,6,7,8] : [8,7,6,5,4,3,2,1]
+      const fileIndices = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7]
+
+      for (const rank of ranks) {
+        for (const fi of fileIndices) {
           const sq = FILES[fi] + rank
           const piece = game.get(sq)
           const div = document.createElement('div')
@@ -128,7 +209,7 @@
               div.classList.add('target')
               if (piece) div.classList.add('occupied')
             }
-            if (inputEnabled && piece?.color === 'w' && game.turn() === 'w') {
+            if (inputEnabled && piece?.color === playerColor && game.turn() === playerColor) {
               div.classList.add('interactive')
             }
           }
@@ -161,8 +242,46 @@
       render()
     }
 
+    function startGame() {
+      playerColor = playerColorEl.value
+      isGameStarted = true
+      moveCount = 0
+
+      botTypeEl.disabled = true
+      playerColorEl.disabled = true
+      startBtn.hidden = true
+      moveCounterEl.hidden = false
+      moveCounterEl.textContent = 'Move: 0'
+
+      if (playerColor === 'b') {
+        inputEnabled = false
+        render()
+        setTimeout(botMove, 400)
+      } else {
+        inputEnabled = true
+        render()
+      }
+    }
+
+    function newGame() {
+      game1.reset()
+      game2.reset()
+      selected = null
+      targets = []
+      inputEnabled = false
+      isGameStarted = false
+      moveCount = 0
+
+      botTypeEl.disabled = false
+      playerColorEl.disabled = false
+      startBtn.hidden = false
+      moveCounterEl.hidden = true
+
+      render()
+    }
+
     document.getElementById('board1').addEventListener('click', e => {
-      if (!inputEnabled) return
+      if (!isGameStarted || !inputEnabled) return
       const div = e.target.closest('[data-sq]')
       if (!div) return
       const sq = div.dataset.sq
@@ -173,13 +292,15 @@
         selected = null
         targets = []
         inputEnabled = false
+        moveCount++
+        moveCounterEl.textContent = 'Move: ' + moveCount
         render()
         setTimeout(botMove, 400)
         return
       }
 
       const piece = game1.get(sq)
-      if (piece && piece.color === 'w' && game1.turn() === 'w') {
+      if (piece && piece.color === playerColor && game1.turn() === playerColor) {
         selected = sq
         targets = intersect(sq)
       } else {
@@ -188,6 +309,9 @@
       }
       render()
     })
+
+    startBtn.addEventListener('click', startGame)
+    newGameBtn.addEventListener('click', newGame)
 
     render()
   </script>
