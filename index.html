@@ -136,6 +136,18 @@
     }
     .wp { color: #fff; text-shadow: 0 0 2px #333, 0 0 4px #333; }
     .bp { color: #1a1a1a; }
+    .sq img { width: 90%; height: 90%; pointer-events: none; display: block; }
+    .sq.origin::before {
+      content: '';
+      position: absolute;
+      bottom: 4px;
+      right: 4px;
+      width: 10px;
+      height: 10px;
+      background: #3a7d4a;
+      border-radius: 50%;
+      pointer-events: none;
+    }
 
     /* Banners */
     #banner-overlay {
@@ -203,6 +215,12 @@
       <input type="range" id="skill-slider" min="0" max="5" value="3" step="1">
       <span id="skill-value">3</span>
     </label>
+    <label>Pieces: <select id="piece-set">
+      <option value="cburnett">Classic (cburnett)</option>
+      <option value="staunty">Staunty</option>
+      <option value="merida">Merida</option>
+      <option value="unicode">Unicode ♟</option>
+    </select></label>
     <label>Play as: <select id="player-color">
       <option value="w">White</option>
       <option value="b">Black</option>
@@ -210,6 +228,7 @@
     <button id="start-btn">Start Game</button>
     <button id="new-game-btn">New Game</button>
     <span id="move-counter" hidden>Move: 0</span>
+    <label id="highlight-label" hidden><input type="checkbox" id="highlight-toggle"> Highlights</label>
     <span id="loading-msg" hidden>Loading Stockfish…</span>
   </div>
 
@@ -329,6 +348,8 @@
     let gamePhase = 'pre'
     // which board is still active after partial victory (1 or 2)
     let partialSurvivingBoard = null
+    let highlightToggle = false
+    let pieceSet = 'cburnett'
 
     const botTypeEl     = document.getElementById('bot-type')
     const skillLabelEl  = document.getElementById('skill-label')
@@ -338,13 +359,16 @@
     const startBtn      = document.getElementById('start-btn')
     const newGameBtn    = document.getElementById('new-game-btn')
     const moveCounterEl = document.getElementById('move-counter')
-    const loadingMsgEl  = document.getElementById('loading-msg')
+    const loadingMsgEl      = document.getElementById('loading-msg')
+    const highlightLabelEl  = document.getElementById('highlight-label')
+    const highlightToggleEl = document.getElementById('highlight-toggle')
+    const pieceSetEl        = document.getElementById('piece-set')
 
     function sqLight(fi, rank) {
       return (fi + rank) % 2 === 0
     }
 
-    function renderBoard(id, game, interactive) {
+    function renderBoard(id, game, interactive, highlights = []) {
       const el = document.getElementById(id)
       el.innerHTML = ''
       const flipped = isGameStarted && playerColor === 'b'
@@ -360,9 +384,19 @@
           div.dataset.sq = sq
 
           if (piece) {
-            div.textContent = GLYPHS[piece.color + piece.type]
-            div.classList.add(piece.color === 'w' ? 'wp' : 'bp')
+            if (pieceSet === 'unicode') {
+              div.textContent = GLYPHS[piece.color + piece.type]
+              div.classList.add(piece.color === 'w' ? 'wp' : 'bp')
+            } else {
+              const img = document.createElement('img')
+              img.src = `https://lichess1.org/assets/piece/${pieceSet}/${piece.color}${piece.type.toUpperCase()}.svg`
+              img.alt = ''
+              img.draggable = false
+              div.appendChild(img)
+            }
           }
+
+          if (highlights.includes(sq)) div.classList.add('origin')
 
           if (interactive) {
             if (sq === selected) div.classList.add('selected')
@@ -385,6 +419,7 @@
       const panel2 = document.getElementById('panel2')
       const label1 = document.getElementById('label1')
       const label2 = document.getElementById('label2')
+      const highlights = getHighlightSquares()
 
       panel1.classList.remove('frozen')
       panel2.classList.remove('frozen')
@@ -394,19 +429,19 @@
           label1.textContent = 'Board 1 — Active'
           label2.textContent = 'Board 2 — Won'
           panel2.classList.add('frozen')
-          renderBoard('board1', game1, true)
+          renderBoard('board1', game1, true, highlights)
           renderBoard('board2', game2, false)
         } else {
           label1.textContent = 'Board 1 — Won'
           label2.textContent = 'Board 2 — Active'
           panel1.classList.add('frozen')
           renderBoard('board1', game1, false)
-          renderBoard('board2', game2, true)
+          renderBoard('board2', game2, true, highlights)
         }
       } else {
         label1.textContent = isGameStarted ? 'Board 1 — You play' : 'Board 1'
         label2.textContent = 'Board 2'
-        renderBoard('board1', game1, true)
+        renderBoard('board1', game1, true, highlights)
         renderBoard('board2', game2, false)
       }
     }
@@ -421,6 +456,19 @@
       const moves = game1.moves({verbose: true})
       const froms = [...new Set(moves.map(m => m.from))]
       return froms.some(sq => intersect(sq).length > 0)
+    }
+
+    function getHighlightSquares() {
+      if (!highlightToggle) return []
+      if (gamePhase === 'playing') {
+        const froms = [...new Set(game1.moves({verbose: true}).map(m => m.from))]
+        return froms.filter(sq => intersect(sq).length > 0)
+      }
+      if (gamePhase === 'partial') {
+        const sg = partialSurvivingBoard === 1 ? game1 : game2
+        return [...new Set(sg.moves({verbose: true}).map(m => m.from))]
+      }
+      return []
     }
 
     function showBanner(type, wonBoard) {
@@ -603,6 +651,7 @@
       gamePhase = 'playing'
       moveCounterEl.hidden = false
       moveCounterEl.textContent = 'Move: 0'
+      highlightLabelEl.hidden = false
 
       if (playerColor === 'b') {
         inputEnabled = false
@@ -634,6 +683,9 @@
       startBtn.hidden = false
       moveCounterEl.hidden = true
       loadingMsgEl.hidden = true
+      highlightLabelEl.hidden = true
+      highlightToggle = false
+      highlightToggleEl.checked = false
 
       render()
     }
@@ -696,6 +748,14 @@
     })
     skillSliderEl.addEventListener('input', () => {
       skillValueEl.textContent = skillSliderEl.value
+    })
+    highlightToggleEl.addEventListener('change', () => {
+      highlightToggle = highlightToggleEl.checked
+      render()
+    })
+    pieceSetEl.addEventListener('change', () => {
+      pieceSet = pieceSetEl.value
+      render()
     })
 
     document.getElementById('board1').addEventListener('click', e => handleBoardClick(1, e))
