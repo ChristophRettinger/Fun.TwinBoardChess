@@ -16,13 +16,7 @@ You play the same side on two chess boards simultaneously against the same bot. 
 
 ## Setup
 
-No build step. Serve `index.html` from any static web server and open it in a browser.
-
-```
-npx serve .
-```
-
-The game requires a server (not `file://`) because Stockfish loads as a WASM module.
+No build step. Open `index.html` directly in a browser — `file://` works fine.
 
 ## Controls
 
