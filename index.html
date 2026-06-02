@@ -55,7 +55,8 @@
       vertical-align: middle;
     }
     #difficulty-slider:disabled { opacity: 0.5; cursor: not-allowed; }
-    #difficulty-value { font-size: 0.875rem; font-weight: 500; white-space: nowrap; }
+    #difficulty-value { font-size: 0.875rem; font-weight: 500; white-space: nowrap; min-width: 7em; display: inline-block; }
+    .invisible { visibility: hidden; }
     #loading-msg { font-size: 0.875rem; color: #a6adc8; }
     .controls button {
       background: #89b4fa;
@@ -340,9 +341,9 @@
     </select></label>
     <button id="new-game-btn">New Game</button>
     <button id="rules-btn">Rules</button>
-    <span id="move-counter" hidden>Move: 0</span>
-    <label id="highlight-label" hidden><input type="checkbox" id="highlight-toggle"> Highlights</label>
-    <span id="loading-msg" hidden>Loading Stockfish…</span>
+    <span id="move-counter" class="invisible">Move: 0</span>
+    <label id="highlight-label" class="invisible"><input type="checkbox" id="highlight-toggle"> Highlights</label>
+    <span id="loading-msg" class="invisible">Loading Stockfish…</span>
   </div>
 
   <div class="boards">
@@ -873,25 +874,25 @@
       }
 
       if (difficulty.type === 'stockfish' || difficulty.type === 'novice') {
-        loadingMsgEl.hidden = false
+        loadingMsgEl.classList.remove('invisible')
         try {
           await bot.init()
         } catch (err) {
           bot.destroy()
           bot = null
-          loadingMsgEl.hidden = true
+          loadingMsgEl.classList.add('invisible')
           alert('Failed to load Stockfish. Check your internet connection and try again.')
           return
         }
-        loadingMsgEl.hidden = true
+        loadingMsgEl.classList.add('invisible')
       }
 
       isGameStarted = true
       moveCount = 0
       gamePhase = 'playing'
-      moveCounterEl.hidden = false
+      moveCounterEl.classList.remove('invisible')
       moveCounterEl.textContent = 'Move: 0'
-      highlightLabelEl.hidden = false
+      highlightLabelEl.classList.remove('invisible')
 
       if (playerColor === 'b') {
         inputEnabled = false
@@ -919,9 +920,9 @@
       lastMove2 = null
       hideBanner()
 
-      moveCounterEl.hidden = true
-      loadingMsgEl.hidden = true
-      highlightLabelEl.hidden = true
+      moveCounterEl.classList.add('invisible')
+      loadingMsgEl.classList.add('invisible')
+      highlightLabelEl.classList.add('invisible')
       highlightToggle = false
       highlightToggleEl.checked = false
 
@@ -947,6 +948,8 @@
           otherGame.move({from: selected, to: sq, promotion: 'q'})
         }
 
+        lastMove1 = null
+        lastMove2 = null
         selected = null
         targets = []
         inputEnabled = false
@@ -991,6 +994,7 @@
       difficultyValueEl.textContent = difficultyFromSlider(parseInt(difficultySliderEl.value, 10)).label
     })
     difficultySliderEl.addEventListener('change', () => {
+      localStorage.setItem('tbc_difficulty', difficultySliderEl.value)
       newGame(); startGame()
     })
     playerColorEl.addEventListener('change', () => {
@@ -1002,6 +1006,7 @@
     })
     pieceSetEl.addEventListener('change', () => {
       pieceSet = pieceSetEl.value
+      localStorage.setItem('tbc_pieceSet', pieceSet)
       render()
     })
 
@@ -1028,6 +1033,18 @@
       hideBanner()
       newGame(); startGame()
     })
+
+    const savedDifficulty = parseInt(localStorage.getItem('tbc_difficulty'), 10)
+    if (!isNaN(savedDifficulty) && savedDifficulty >= 0 && savedDifficulty <= 11) {
+      difficultySliderEl.value = savedDifficulty
+      difficultyValueEl.textContent = difficultyFromSlider(savedDifficulty).label
+    }
+    const savedPieceSet = localStorage.getItem('tbc_pieceSet')
+    const validPieceSets = Array.from(pieceSetEl.options).map(o => o.value)
+    if (savedPieceSet && validPieceSets.includes(savedPieceSet)) {
+      pieceSetEl.value = savedPieceSet
+      pieceSet = savedPieceSet
+    }
 
     startGame()
   </script>
