@@ -611,14 +611,8 @@
       el.innerHTML = ''
 
       function makeIcon(color, type) {
-        if (pieceSet === 'unicode') {
-          const span = document.createElement('span')
-          span.textContent = GLYPHS[color + type]
-          span.className = 'captured-piece-glyph'
-          return span
-        }
         const img = document.createElement('img')
-        img.src = `https://lichess1.org/assets/piece/${pieceSet}/${color}${type.toUpperCase()}.svg`
+        img.src = `https://lichess1.org/assets/piece/staunty/${color}${type.toUpperCase()}.svg`
         img.alt = type
         img.className = 'captured-piece'
         return img
