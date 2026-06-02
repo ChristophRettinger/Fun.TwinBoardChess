@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Twin Board Chess</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%231e1e2e' rx='3'/%3E%3Ctext x='1' y='23' font-size='15' font-family='serif' fill='white'%3E%E2%99%94%3C/text%3E%3Ctext x='15' y='23' font-size='15' font-family='serif' fill='%23a6adc8'%3E%E2%99%9A%3C/text%3E%3C/svg%3E">
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     [hidden] { display: none !important; }
@@ -90,6 +91,14 @@
       transition: opacity 0.3s;
     }
     .panel.frozen { opacity: 0.45; }
+    h1 {
+      margin: 0;
+      color: #cdd6f4;
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-align: center;
+    }
     h2 {
       margin: 0;
       color: #cdd6f4;
@@ -307,15 +316,17 @@
       #move-counter, #loading-msg { font-size: 0.75rem; }
       .controls button { padding: 0.2rem 0.6rem; }
       #difficulty-slider { width: 70px; }
+      h1 { font-size: 1rem; }
       h2 { font-size: 0.85rem; }
     }
   </style>
 </head>
 <body>
+  <h1>Twin Board Chess</h1>
   <div class="controls">
     <label>Difficulty:
-      <input type="range" id="difficulty-slider" min="0" max="11" value="6" step="1">
-      <span id="difficulty-value">Stockfish 0</span>
+      <input type="range" id="difficulty-slider" min="0" max="11" value="0" step="1">
+      <span id="difficulty-value">Random</span>
     </label>
     <label>Pieces: <select id="piece-set">
       <option value="cburnett">Classic (cburnett)</option>
@@ -327,7 +338,6 @@
       <option value="w">White</option>
       <option value="b">Black</option>
     </select></label>
-    <button id="start-btn">Start Game</button>
     <button id="new-game-btn">New Game</button>
     <button id="rules-btn">Rules</button>
     <span id="move-counter" hidden>Move: 0</span>
@@ -366,7 +376,7 @@
       <h3>Losing</h3>
       <p>No shared legal move exists between the boards; stalemate on either board; the bot checkmates or stalemates you on the surviving board after partial victory.</p>
       <h3>Notes</h3>
-      <p>Pawns always promote to queen. You interact only with Board 1 during normal play; the move mirrors automatically to Board 2.</p>
+      <p>Pawns always promote to queen. You can click a piece on either board to initiate a move; the move applies to both boards simultaneously.</p>
     </div>
   </div>
 
@@ -517,7 +527,6 @@
     const difficultySliderEl = document.getElementById('difficulty-slider')
     const difficultyValueEl  = document.getElementById('difficulty-value')
     const playerColorEl      = document.getElementById('player-color')
-    const startBtn      = document.getElementById('start-btn')
     const newGameBtn    = document.getElementById('new-game-btn')
     const moveCounterEl = document.getElementById('move-counter')
     const loadingMsgEl      = document.getElementById('loading-msg')
@@ -669,9 +678,9 @@
         }
       } else {
         label1.textContent = isGameStarted ? 'Board 1 — You play' : 'Board 1'
-        label2.textContent = 'Board 2'
-        renderBoard('board1', game1, true,  highlights, lastMove1)
-        renderBoard('board2', game2, false, [],         lastMove2)
+        label2.textContent = isGameStarted ? 'Board 2 — You play' : 'Board 2'
+        renderBoard('board1', game1, true, highlights, lastMove1)
+        renderBoard('board2', game2, true, highlights, lastMove2)
       }
 
       renderCapturedRow(document.getElementById('captured1'), game1, playerColor)
@@ -860,9 +869,6 @@
     async function startGame() {
       const difficulty = difficultyFromSlider(parseInt(difficultySliderEl.value, 10))
       playerColor = playerColorEl.value
-      difficultySliderEl.disabled = true
-      playerColorEl.disabled = true
-      startBtn.hidden = true
 
       if (difficulty.type === 'stockfish') {
         bot = new StockfishBot(difficulty.skillLevel)
@@ -880,9 +886,6 @@
           bot.destroy()
           bot = null
           loadingMsgEl.hidden = true
-          difficultySliderEl.disabled = false
-          playerColorEl.disabled = false
-          startBtn.hidden = false
           alert('Failed to load Stockfish. Check your internet connection and try again.')
           return
         }
@@ -922,9 +925,6 @@
       lastMove2 = null
       hideBanner()
 
-      difficultySliderEl.disabled = false
-      playerColorEl.disabled = false
-      startBtn.hidden = false
       moveCounterEl.hidden = true
       loadingMsgEl.hidden = true
       highlightLabelEl.hidden = true
@@ -936,7 +936,6 @@
 
     function handleBoardClick(boardNum, e) {
       if (!isGameStarted || !inputEnabled) return
-      if (gamePhase === 'playing' && boardNum !== 1) return
       if (gamePhase === 'partial' && boardNum !== partialSurvivingBoard) return
       if (gamePhase !== 'playing' && gamePhase !== 'partial') return
 
@@ -974,6 +973,13 @@
         return
       }
 
+      if (sq === selected) {
+        selected = null
+        targets = []
+        render()
+        return
+      }
+
       const piece = activeGame.get(sq)
       if (piece && piece.color === playerColor && activeGame.turn() === playerColor) {
         selected = sq
@@ -990,6 +996,12 @@
     difficultySliderEl.addEventListener('input', () => {
       difficultyValueEl.textContent = difficultyFromSlider(parseInt(difficultySliderEl.value, 10)).label
     })
+    difficultySliderEl.addEventListener('change', () => {
+      newGame(); startGame()
+    })
+    playerColorEl.addEventListener('change', () => {
+      newGame(); startGame()
+    })
     highlightToggleEl.addEventListener('change', () => {
       highlightToggle = highlightToggleEl.checked
       render()
@@ -1002,8 +1014,7 @@
     document.getElementById('board1').addEventListener('click', e => handleBoardClick(1, e))
     document.getElementById('board2').addEventListener('click', e => handleBoardClick(2, e))
 
-    startBtn.addEventListener('click', startGame)
-    newGameBtn.addEventListener('click', newGame)
+    newGameBtn.addEventListener('click', () => { newGame(); startGame() })
 
     document.getElementById('rules-btn').addEventListener('click', () => {
       document.getElementById('rules-overlay').hidden = false
@@ -1021,10 +1032,10 @@
     })
     document.getElementById('banner-new-game-overlay').addEventListener('click', () => {
       hideBanner()
-      newGame()
+      newGame(); startGame()
     })
 
-    render()
+    startGame()
   </script>
 </body>
 </html>
